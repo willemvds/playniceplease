@@ -11,7 +11,7 @@ use rustix::io as rx_io;
 use rustix::process as rx_process;
 
 struct PidEntry {
-pid: rx_process::Pid,
+    pid: rx_process::Pid,
     name: Vec<u8>,
     stx: Option<fs::Statx>,
 }
@@ -27,9 +27,7 @@ fn main() -> io::Result<()> {
     let my_uid = rx_process::getuid();
     let my_gid = rx_process::getgid();
 
-    eprintln!(
-        "playniceplease: pid={my_pid} uid={my_uid} gid={my_gid}; waiting for SIGTERM"
-    );
+    eprintln!("playniceplease: pid={my_pid} uid={my_uid} gid={my_gid}; waiting for SIGTERM");
 
     let sfd = wait_for_sigterm()?;
 
@@ -84,16 +82,18 @@ fn scan_proc(proc_fd: fd::BorrowedFd<'_>) -> io::Result<Vec<PidEntry>> {
     let mut entries: Vec<PidEntry> = Vec::new();
     while let Some(entry) = dir.next().transpose()? {
         let name = entry.file_name().to_bytes();
-        if !name.is_empty() && name.iter().all(|b| b.is_ascii_digit())
+        if !name.is_empty()
+            && name.iter().all(|b| b.is_ascii_digit())
             && let Ok(s) = std::str::from_utf8(name)
-                && let Ok(pid) = s.parse::<i32>()
-                    && let Some(pid) = rx_process::Pid::from_raw(pid) {
-                        entries.push(PidEntry {
-                            pid,
-                            name: name.to_vec(),
-                            stx: None,
-                        });
-                    }
+            && let Ok(pid) = s.parse::<i32>()
+            && let Some(pid) = rx_process::Pid::from_raw(pid)
+        {
+            entries.push(PidEntry {
+                pid,
+                name: name.to_vec(),
+                stx: None,
+            });
+        }
     }
     eprintln!("playniceplease: scanned {} proc entries", entries.len());
     Ok(entries)
@@ -105,10 +105,7 @@ fn statx_all(proc_fd: fd::BorrowedFd<'_>, entries: &mut [PidEntry]) -> io::Resul
         match fs::statx(proc_fd.as_fd(), &e.name, fs::AtFlags::empty(), mask) {
             Ok(stx) => e.stx = Some(stx),
             Err(err) => {
-                if !matches!(
-                    err,
-                    rx_io::Errno::NOENT | rx_io::Errno::SRCH
-                ) {
+                if !matches!(err, rx_io::Errno::NOENT | rx_io::Errno::SRCH) {
                     return Err(err.into());
                 }
             }
@@ -185,7 +182,10 @@ fn terminate_and_confirm(
 
         let ready: Vec<bool> = pollfds
             .iter()
-            .map(|pfd| pfd.revents().intersects(event::PollFlags::IN | event::PollFlags::HUP))
+            .map(|pfd| {
+                pfd.revents()
+                    .intersects(event::PollFlags::IN | event::PollFlags::HUP)
+            })
             .collect();
 
         let mut i = 0;
@@ -208,8 +208,7 @@ fn wait_and_report(pid: rx_process::Pid, pidfd: fd::BorrowedFd<'_>) -> bool {
     let result = rx_io::retry_on_intr(|| {
         rx_process::waitid(
             rx_process::WaitId::PidFd(pidfd),
-            rx_process::WaitIdOptions::EXITED
-                | rx_process::WaitIdOptions::NOWAIT,
+            rx_process::WaitIdOptions::EXITED | rx_process::WaitIdOptions::NOWAIT,
         )
     });
 

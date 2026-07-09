@@ -10,6 +10,8 @@ use rustix::fs;
 use rustix::io as rx_io;
 use rustix::process as rx_process;
 
+const EXIT_FAILURE: i32 = 1;
+
 struct PidEntry {
     pid: rx_process::Pid,
     name: Vec<u8>,
@@ -21,7 +23,7 @@ fn main() -> io::Result<()> {
 
     if !my_pid.is_init() {
         eprintln!("That does not seem very nice.");
-        process::exit(1);
+        process::exit(EXIT_FAILURE);
     }
 
     let my_uid = rx_process::getuid();

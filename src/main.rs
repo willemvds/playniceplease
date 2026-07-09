@@ -3,31 +3,29 @@ use std::mem;
 use std::os::unix::io::FromRawFd;
 use std::process;
 
-use rustix::event::{poll, PollFd, PollFlags};
-use rustix::fd::{AsFd, BorrowedFd, OwnedFd};
-use rustix::fs::{openat, statx, AtFlags, Dir, OFlags, Statx, StatxFlags, CWD};
-use rustix::io::{read, retry_on_intr};
-use rustix::process::{
-    getgid, getpid, getuid, pidfd_open, pidfd_send_signal, waitid, Gid, Pid, PidfdFlags, Signal,
-    Uid, WaitId, WaitIdOptions,
-};
+use rustix::event;
+use rustix::fd;
+use rustix::fd::AsFd;
+use rustix::fs;
+use rustix::io as rx_io;
+use rustix::process as rx_process;
 
 struct PidEntry {
-    pid: Pid,
+pid: rx_process::Pid,
     name: Vec<u8>,
-    stx: Option<Statx>,
+    stx: Option<fs::Statx>,
 }
 
 fn main() -> io::Result<()> {
-    let my_pid = getpid();
+    let my_pid = rx_process::getpid();
 
     if !my_pid.is_init() {
         eprintln!("That does not seem very nice.");
         process::exit(1);
     }
 
-    let my_uid = getuid();
-    let my_gid = getgid();
+    let my_uid = rx_process::getuid();
+    let my_gid = rx_process::getgid();
 
     eprintln!(
         "playniceplease: pid={my_pid} uid={my_uid} gid={my_gid}; waiting for SIGTERM"
@@ -35,11 +33,11 @@ fn main() -> io::Result<()> {
 
     let sfd = wait_for_sigterm()?;
 
-    let proc_fd = openat(
-        CWD,
+    let proc_fd = fs::openat(
+        fs::CWD,
         "/proc",
-        OFlags::RDONLY | OFlags::DIRECTORY | OFlags::CLOEXEC,
-        rustix::fs::Mode::empty(),
+        fs::OFlags::RDONLY | fs::OFlags::DIRECTORY | fs::OFlags::CLOEXEC,
+        fs::Mode::empty(),
     )?;
     let mut entries = scan_proc(proc_fd.as_fd())?;
     statx_all(proc_fd.as_fd(), &mut entries)?;
@@ -54,7 +52,7 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn wait_for_sigterm() -> io::Result<OwnedFd> {
+fn wait_for_sigterm() -> io::Result<fd::OwnedFd> {
     let mut mask: libc::sigset_t = unsafe { mem::zeroed() };
     unsafe {
         libc::sigemptyset(&mut mask);
@@ -68,11 +66,11 @@ fn wait_for_sigterm() -> io::Result<OwnedFd> {
     if raw_sfd < 0 {
         return Err(io::Error::last_os_error());
     }
-    let sfd = unsafe { OwnedFd::from_raw_fd(raw_sfd) };
+    let sfd = unsafe { fd::OwnedFd::from_raw_fd(raw_sfd) };
 
     let mut ssi = [0u8; mem::size_of::<libc::signalfd_siginfo>()];
     loop {
-        let n = read(sfd.as_fd(), &mut ssi)?;
+        let n = rx_io::read(sfd.as_fd(), &mut ssi)?;
         if n == mem::size_of::<libc::signalfd_siginfo>() {
             break;
         }
@@ -81,38 +79,35 @@ fn wait_for_sigterm() -> io::Result<OwnedFd> {
     Ok(sfd)
 }
 
-fn scan_proc(proc_fd: BorrowedFd<'_>) -> io::Result<Vec<PidEntry>> {
-    let mut dir = Dir::read_from(proc_fd)?;
+fn scan_proc(proc_fd: fd::BorrowedFd<'_>) -> io::Result<Vec<PidEntry>> {
+    let mut dir = fs::Dir::read_from(proc_fd)?;
     let mut entries: Vec<PidEntry> = Vec::new();
     while let Some(entry) = dir.next().transpose()? {
         let name = entry.file_name().to_bytes();
-        if !name.is_empty() && name.iter().all(|b| b.is_ascii_digit()) {
-            if let Ok(s) = std::str::from_utf8(name) {
-                if let Ok(pid) = s.parse::<i32>() {
-                    if let Some(pid) = Pid::from_raw(pid) {
+        if !name.is_empty() && name.iter().all(|b| b.is_ascii_digit())
+            && let Ok(s) = std::str::from_utf8(name)
+                && let Ok(pid) = s.parse::<i32>()
+                    && let Some(pid) = rx_process::Pid::from_raw(pid) {
                         entries.push(PidEntry {
                             pid,
                             name: name.to_vec(),
                             stx: None,
                         });
                     }
-                }
-            }
-        }
     }
     eprintln!("playniceplease: scanned {} proc entries", entries.len());
     Ok(entries)
 }
 
-fn statx_all(proc_fd: BorrowedFd<'_>, entries: &mut [PidEntry]) -> io::Result<()> {
-    let mask = StatxFlags::UID | StatxFlags::GID;
+fn statx_all(proc_fd: fd::BorrowedFd<'_>, entries: &mut [PidEntry]) -> io::Result<()> {
+    let mask = fs::StatxFlags::UID | fs::StatxFlags::GID;
     for e in entries.iter_mut() {
-        match statx(proc_fd.as_fd(), &e.name, AtFlags::empty(), mask) {
+        match fs::statx(proc_fd.as_fd(), &e.name, fs::AtFlags::empty(), mask) {
             Ok(stx) => e.stx = Some(stx),
             Err(err) => {
                 if !matches!(
                     err,
-                    rustix::io::Errno::NOENT | rustix::io::Errno::SRCH
+                    rx_io::Errno::NOENT | rx_io::Errno::SRCH
                 ) {
                     return Err(err.into());
                 }
@@ -124,15 +119,15 @@ fn statx_all(proc_fd: BorrowedFd<'_>, entries: &mut [PidEntry]) -> io::Result<()
 
 fn terminate_and_confirm(
     entries: &[PidEntry],
-    my_uid: Uid,
-    my_gid: Gid,
-    my_pid: Pid,
+    my_uid: rx_process::Uid,
+    my_gid: rx_process::Gid,
+    my_pid: rx_process::Pid,
 ) -> (usize, usize) {
-    let wanted = (StatxFlags::UID | StatxFlags::GID).bits();
+    let wanted = (fs::StatxFlags::UID | fs::StatxFlags::GID).bits();
     let my_uid_raw = my_uid.as_raw();
     let my_gid_raw = my_gid.as_raw();
 
-    let mut targets: Vec<(Pid, OwnedFd)> = Vec::new();
+    let mut targets: Vec<(rx_process::Pid, fd::OwnedFd)> = Vec::new();
     for e in entries {
         if e.pid == my_pid {
             continue;
@@ -146,10 +141,10 @@ fn terminate_and_confirm(
         if stx.stx_uid != my_uid_raw && stx.stx_gid != my_gid_raw {
             continue;
         }
-        match pidfd_open(e.pid, PidfdFlags::empty()) {
+        match rx_process::pidfd_open(e.pid, rx_process::PidfdFlags::empty()) {
             Ok(fd) => targets.push((e.pid, fd)),
             Err(err) => {
-                if err == rustix::io::Errno::SRCH {
+                if err == rx_io::Errno::SRCH {
                     eprintln!("playniceplease: pid={}: already exited (no pidfd)", e.pid);
                 } else {
                     eprintln!("playniceplease: pid={}: cannot open pidfd ({err})", e.pid);
@@ -160,12 +155,12 @@ fn terminate_and_confirm(
 
     let sent = targets.len();
 
-    let mut waiters: Vec<(Pid, OwnedFd)> = Vec::with_capacity(targets.len());
+    let mut waiters: Vec<(rx_process::Pid, fd::OwnedFd)> = Vec::with_capacity(targets.len());
     for (pid, pidfd) in targets {
-        match pidfd_send_signal(pidfd.as_fd(), Signal::TERM) {
+        match rx_process::pidfd_send_signal(pidfd.as_fd(), rx_process::Signal::TERM) {
             Ok(()) => waiters.push((pid, pidfd)),
             Err(err) => {
-                if err == rustix::io::Errno::SRCH {
+                if err == rx_io::Errno::SRCH {
                     eprintln!("playniceplease: pid={pid}: exited before signal");
                 } else {
                     eprintln!("playniceplease: pid={pid}: pidfd_send_signal failed ({err})");
@@ -176,11 +171,11 @@ fn terminate_and_confirm(
 
     let mut confirmed = 0usize;
     while !waiters.is_empty() {
-        let mut pollfds: Vec<PollFd<'_>> = waiters
+        let mut pollfds: Vec<event::PollFd<'_>> = waiters
             .iter()
-            .map(|(_, fd)| PollFd::new(fd, PollFlags::IN))
+            .map(|(_, fd)| event::PollFd::new(fd, event::PollFlags::IN))
             .collect();
-        match retry_on_intr(|| poll(&mut pollfds, None)) {
+        match rx_io::retry_on_intr(|| event::poll(&mut pollfds, None)) {
             Ok(_) => {}
             Err(err) => {
                 eprintln!("playniceplease: poll failed ({err})");
@@ -190,7 +185,7 @@ fn terminate_and_confirm(
 
         let ready: Vec<bool> = pollfds
             .iter()
-            .map(|pfd| pfd.revents().intersects(PollFlags::IN | PollFlags::HUP))
+            .map(|pfd| pfd.revents().intersects(event::PollFlags::IN | event::PollFlags::HUP))
             .collect();
 
         let mut i = 0;
@@ -209,11 +204,12 @@ fn terminate_and_confirm(
     (sent, confirmed)
 }
 
-fn wait_and_report(pid: Pid, pidfd: BorrowedFd<'_>) -> bool {
-    let result = retry_on_intr(|| {
-        waitid(
-            WaitId::PidFd(pidfd),
-            WaitIdOptions::EXITED | WaitIdOptions::NOWAIT,
+fn wait_and_report(pid: rx_process::Pid, pidfd: fd::BorrowedFd<'_>) -> bool {
+    let result = rx_io::retry_on_intr(|| {
+        rx_process::waitid(
+            rx_process::WaitId::PidFd(pidfd),
+            rx_process::WaitIdOptions::EXITED
+                | rx_process::WaitIdOptions::NOWAIT,
         )
     });
 
@@ -223,7 +219,7 @@ fn wait_and_report(pid: Pid, pidfd: BorrowedFd<'_>) -> bool {
             eprintln!("playniceplease: pid={pid}: no status available");
             return false;
         }
-        Err(rustix::io::Errno::CHILD) => {
+        Err(rx_io::Errno::CHILD) => {
             eprintln!("playniceplease: pid={pid}: terminated (exit status unavailable)");
             return true;
         }

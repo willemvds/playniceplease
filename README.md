@@ -1,4 +1,4 @@
-# Play Nice, Please!**
+# Play Nice, Please!
 
 ### Notices and Warnings
 - This is intended as an init process for development containers. **DO NOT USE IN PRODUCTION**

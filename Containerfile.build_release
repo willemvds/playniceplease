@@ -1,0 +1,27 @@
+FROM debian:bookworm AS base
+
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        curl \
+        build-essential \
+        pkg-config \
+        git \
+        musl-tools \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV CARGO_HOME=/usr/local/cargo
+ENV RUSTUP_HOME=/usr/local/rustup
+ENV PATH=/usr/local/cargo/bin:${PATH}
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
+    | sh -s -- -y --default-toolchain stable --profile default --no-modify-path \
+    && rustup default stable \
+    && rustup target add x86_64-unknown-linux-musl \
+    && rustc --version \
+    && cargo --version
+
+FROM base AS builder
+WORKDIR /playniceplease
+CMD ["cargo", "build", "--release", "--offline"]

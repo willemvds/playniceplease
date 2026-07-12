@@ -29,9 +29,9 @@ fn main() -> io::Result<()> {
     let my_uid = rx_process::getuid();
     let my_gid = rx_process::getgid();
 
-    eprintln!("playniceplease: pid={my_pid} uid={my_uid} gid={my_gid}; waiting for SIGTERM");
+    eprintln!("playniceplease: pid={my_pid} uid={my_uid} gid={my_gid}; waiting for SIGTERM/SIGINT");
 
-    let sfd = wait_for_sigterm()?;
+    let sfd = wait_for_signal()?;
 
     let proc_fd = fs::openat(
         fs::CWD,
@@ -52,11 +52,12 @@ fn main() -> io::Result<()> {
     Ok(())
 }
 
-fn wait_for_sigterm() -> io::Result<fd::OwnedFd> {
+fn wait_for_signal() -> io::Result<fd::OwnedFd> {
     let mut mask: libc::sigset_t = unsafe { mem::zeroed() };
     unsafe {
         libc::sigemptyset(&mut mask);
         libc::sigaddset(&mut mask, libc::SIGTERM);
+        libc::sigaddset(&mut mask, libc::SIGINT);
         if libc::sigprocmask(libc::SIG_BLOCK, &mask, std::ptr::null_mut()) != 0 {
             return Err(io::Error::last_os_error());
         }
@@ -72,10 +73,13 @@ fn wait_for_sigterm() -> io::Result<fd::OwnedFd> {
     loop {
         let n = rx_io::read(sfd.as_fd(), &mut ssi)?;
         if n == mem::size_of::<libc::signalfd_siginfo>() {
+            let info: &libc::signalfd_siginfo =
+                unsafe { &*(ssi.as_ptr() as *const libc::signalfd_siginfo) };
+            let name = signal_name(info.ssi_signo as i32);
+            eprintln!("playniceplease: {name} received");
             break;
         }
     }
-    eprintln!("playniceplease: SIGTERM received");
     Ok(sfd)
 }
 

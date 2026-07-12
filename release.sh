@@ -31,3 +31,8 @@ RELEASE_DIR="${SCRIPT_DIR}/releases/playniceplease-x86_64-linux-${VERSION}"
 mkdir -p "$RELEASE_DIR"
 cp -f "$BINARY" "${RELEASE_DIR}/playniceplease"
 echo "Released ${VERSION} to: ${RELEASE_DIR}/playniceplease"
+
+ZIP_NAME="$(basename "${RELEASE_DIR}").zip"
+zip -j "${RELEASE_DIR}/${ZIP_NAME}" "${RELEASE_DIR}/playniceplease"
+mv -f "${RELEASE_DIR}/${ZIP_NAME}" "${SCRIPT_DIR}/releases/"
+echo "Released archive: ${SCRIPT_DIR}/releases/${ZIP_NAME}"

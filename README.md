@@ -2,8 +2,8 @@
 
 ## About
 What does it do?
-1) Listens for SIGINT (pressing ctrl+C) and SIGTERM (OS asking nicely to exit).
-2) When a signal is received it sends SIGTERM to all sibling processes (other processes running inside the container).
+1) Listens for `SIGINT` (pressing ctrl+C) and `SIGTERM` (OS asking nicely to exit).
+2) When a signal is received it sends `SIGTERM` to all sibling processes (other processes running inside the container).
 3) After sending all the signals it checks up on the processes waiting for them to exit.
 
 I am using `playniceplease` as the init process for all my development containers which typically consists of:

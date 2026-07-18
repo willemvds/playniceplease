@@ -6,7 +6,7 @@ VERSION="0.1.2"
 ARCH="x86_64"
 ASSET="playniceplease-${ARCH}-linux-static-${VERSION}.zip"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${ASSET}"
-INSTALL_DIR="/usr/bin"
+INSTALL_DIR="/usr/local/bin"
 BINARY_NAME="playniceplease"
 
 tmpdir="$(mktemp -d)"

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icon.svg" width="64" height="64" alt="icon" />
+  <img src="icon.svg" width="256" height="256" alt="icon" />
 </p>
 
 # Play Nice, Please!

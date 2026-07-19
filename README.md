@@ -11,6 +11,9 @@ What does it do?
 3) After sending all the signals it checks up on the processes waiting for them to exit.
 4) Collects exit codes for child processes (reap zombie processes) allowing OS to free the PID and associated data.
 
+What does it not do?
+1) If a child process ignores the SIGTERM signal `playniceplease` will wait indefinitely. There are no timeout mechanisms because tools like podman will handle timeout and eventually kill the container. Having an interactive `zsh` session running is an example of this.
+
 I am using `playniceplease` as the init process for all my development containers which typically consists of:
 - Debian base image.
 - Dev tools needed for project like compiler/package manager/dependencies.
@@ -22,9 +25,9 @@ I am using `playniceplease` as the init process for all my development container
 
 ## Example `Containerfile`
 ```
-COPY playniceplease /bin/playniceplease
+COPY playniceplease /usr/local/bin/playniceplease
 
-CMD ["/bin/playniceplease"]
+CMD ["/usr/local/bin/playniceplease"]
 ```
 
 ## Notices and Warnings

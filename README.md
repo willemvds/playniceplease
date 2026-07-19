@@ -11,7 +11,7 @@ What does it do?
 3) After sending all the signals it checks up on the processes waiting for them to exit.
 4) Collects exit codes for child processes from `SIGCHLD` allowing OS to free the PID and associated data.
 
-What does it not do?
+What does it **NOT** do?
 1) If a child process ignores the `SIGTERM` signal `playniceplease` will wait indefinitely. There are no timeout mechanisms because tools like `podman` will handle timeout and eventually kill the container. Having an interactive `zsh` session running is an example of this.
 
 I am using `playniceplease` as the init process for all my development containers which typically consists of:

@@ -174,6 +174,15 @@ fn statx_all(proc_fd: fd::BorrowedFd<'_>, entries: &mut [PidEntry]) -> io::Resul
     Ok(())
 }
 
+fn read_cmdline(pid: rx_process::Pid) -> io::Result<String> {
+    let path = format!("/proc/{}/cmdline", pid.as_raw_pid());
+    let fd = fs::openat(fs::CWD, path, fs::OFlags::RDONLY, fs::Mode::empty())?;
+    let mut buf = vec![0u8; 4096];
+    let n = rx_io::read(fd.as_fd(), &mut buf)?;
+    buf.truncate(n);
+    Ok(String::from_utf8_lossy(&buf).replace('\0', " ").trim().to_string())
+}
+
 fn terminate_and_confirm(
     entries: &[PidEntry],
     my_uid: rx_process::Uid,
@@ -223,6 +232,13 @@ fn terminate_and_confirm(
                     eprintln!("playniceplease: pid={pid}: pidfd_send_signal failed ({err})");
                 }
             }
+        }
+    }
+
+    for (pid, _) in &waiters {
+        match read_cmdline(*pid) {
+            Ok(cmdline) => eprintln!("playniceplease: pid={pid}: cmdline={cmdline}"),
+            Err(err) => eprintln!("playniceplease: pid={pid}: <cmdline unavailable: {err}>"),
         }
     }
 

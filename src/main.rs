@@ -29,7 +29,7 @@ fn main() -> io::Result<()> {
     let my_uid = rx_process::getuid();
     let my_gid = rx_process::getgid();
 
-    eprintln!("playniceplease: pid={my_pid} uid={my_uid} gid={my_gid}; waiting for SIGTERM/SIGINT");
+    eprintln!("playnicepls: pid={my_pid} uid={my_uid} gid={my_gid}; waiting for SIGTERM/SIGINT");
 
     let sfd = run_signal_loop()?;
 
@@ -45,7 +45,7 @@ fn main() -> io::Result<()> {
 
     let (sent, confirmed) = terminate_and_confirm(&entries, my_uid, my_gid, my_pid);
     eprintln!(
-        "playniceplease: sent SIGTERM to {sent} process(es), confirmed {confirmed} terminated, exiting"
+        "playnicepls: sent SIGTERM to {sent} process(es), confirmed {confirmed} terminated, exiting"
     );
 
     drop(sfd);
@@ -80,7 +80,7 @@ fn run_signal_loop() -> io::Result<fd::OwnedFd> {
                 libc::SIGCHLD => reap_zombies(),
                 libc::SIGTERM | libc::SIGINT => {
                     let name = signal_name(info.ssi_signo as i32);
-                    eprintln!("playniceplease: {name} received");
+                    eprintln!("playnicepls: {name} received");
                     break;
                 }
                 _ => {}
@@ -100,7 +100,7 @@ fn reap_zombies() {
             Ok(None) => break,
             Err(rx_io::Errno::CHILD) => break,
             Err(err) => {
-                eprintln!("playniceplease: waitid failed ({err})");
+                eprintln!("playnicepls: waitid failed ({err})");
                 break;
             }
         }
@@ -110,30 +110,30 @@ fn reap_zombies() {
 fn log_reaped(status: &rx_process::WaitIdStatus) {
     if status.exited() {
         if let Some(code) = status.exit_status() {
-            eprintln!("playniceplease: reaped a zombie (exit code {code})");
+            eprintln!("playnicepls: reaped a zombie (exit code {code})");
         } else {
-            eprintln!("playniceplease: reaped a zombie (exit code unavailable)");
+            eprintln!("playnicepls: reaped a zombie (exit code unavailable)");
         }
     } else if status.killed() {
         if let Some(sig) = status.terminating_signal() {
             eprintln!(
-                "playniceplease: reaped a zombie (killed by signal {sig} {})",
+                "playnicepls: reaped a zombie (killed by signal {sig} {})",
                 signal_name(sig)
             );
         } else {
-            eprintln!("playniceplease: reaped a zombie (killed by signal)");
+            eprintln!("playnicepls: reaped a zombie (killed by signal)");
         }
     } else if status.dumped() {
         if let Some(sig) = status.terminating_signal() {
             eprintln!(
-                "playniceplease: reaped a zombie (killed by signal {sig} {}, core dumped)",
+                "playnicepls: reaped a zombie (killed by signal {sig} {}, core dumped)",
                 signal_name(sig)
             );
         } else {
-            eprintln!("playniceplease: reaped a zombie (killed by signal, core dumped)");
+            eprintln!("playnicepls: reaped a zombie (killed by signal, core dumped)");
         }
     } else {
-        eprintln!("playniceplease: reaped a zombie (state changed)");
+        eprintln!("playnicepls: reaped a zombie (state changed)");
     }
 }
 
@@ -155,7 +155,7 @@ fn scan_proc(proc_fd: fd::BorrowedFd<'_>) -> io::Result<Vec<PidEntry>> {
             });
         }
     }
-    eprintln!("playniceplease: scanned {} proc entries", entries.len());
+    eprintln!("playnicepls: scanned {} proc entries", entries.len());
     Ok(entries)
 }
 
@@ -180,7 +180,10 @@ fn read_cmdline(pid: rx_process::Pid) -> io::Result<String> {
     let mut buf = vec![0u8; 4096];
     let n = rx_io::read(fd.as_fd(), &mut buf)?;
     buf.truncate(n);
-    Ok(String::from_utf8_lossy(&buf).replace('\0', " ").trim().to_string())
+    Ok(String::from_utf8_lossy(&buf)
+        .replace('\0', " ")
+        .trim()
+        .to_string())
 }
 
 fn terminate_and_confirm(
@@ -211,9 +214,9 @@ fn terminate_and_confirm(
             Ok(fd) => targets.push((e.pid, fd)),
             Err(err) => {
                 if err == rx_io::Errno::SRCH {
-                    eprintln!("playniceplease: pid={}: already exited (no pidfd)", e.pid);
+                    eprintln!("playnicepls: pid={}: already exited (no pidfd)", e.pid);
                 } else {
-                    eprintln!("playniceplease: pid={}: cannot open pidfd ({err})", e.pid);
+                    eprintln!("playnicepls: pid={}: cannot open pidfd ({err})", e.pid);
                 }
             }
         }
@@ -227,9 +230,9 @@ fn terminate_and_confirm(
             Ok(()) => waiters.push((pid, pidfd)),
             Err(err) => {
                 if err == rx_io::Errno::SRCH {
-                    eprintln!("playniceplease: pid={pid}: exited before signal");
+                    eprintln!("playnicepls: pid={pid}: exited before signal");
                 } else {
-                    eprintln!("playniceplease: pid={pid}: pidfd_send_signal failed ({err})");
+                    eprintln!("playnicepls: pid={pid}: pidfd_send_signal failed ({err})");
                 }
             }
         }
@@ -237,8 +240,8 @@ fn terminate_and_confirm(
 
     for (pid, _) in &waiters {
         match read_cmdline(*pid) {
-            Ok(cmdline) => eprintln!("playniceplease: pid={pid}: cmdline={cmdline}"),
-            Err(err) => eprintln!("playniceplease: pid={pid}: <cmdline unavailable: {err}>"),
+            Ok(cmdline) => eprintln!("playnicepls: pid={pid}: cmdline={cmdline}"),
+            Err(err) => eprintln!("playnicepls: pid={pid}: <cmdline unavailable: {err}>"),
         }
     }
 
@@ -251,7 +254,7 @@ fn terminate_and_confirm(
         match rx_io::retry_on_intr(|| event::poll(&mut pollfds, None)) {
             Ok(_) => {}
             Err(err) => {
-                eprintln!("playniceplease: poll failed ({err})");
+                eprintln!("playnicepls: poll failed ({err})");
                 break;
             }
         }
@@ -291,45 +294,45 @@ fn wait_and_report(pid: rx_process::Pid, pidfd: fd::BorrowedFd<'_>) -> bool {
     let status = match result {
         Ok(Some(status)) => status,
         Ok(None) => {
-            eprintln!("playniceplease: pid={pid}: no status available");
+            eprintln!("playnicepls: pid={pid}: no status available");
             return false;
         }
         Err(rx_io::Errno::CHILD) => {
-            eprintln!("playniceplease: pid={pid}: terminated (exit status unavailable)");
+            eprintln!("playnicepls: pid={pid}: terminated (exit status unavailable)");
             return true;
         }
         Err(err) => {
-            eprintln!("playniceplease: pid={pid}: waitid failed ({err})");
+            eprintln!("playnicepls: pid={pid}: waitid failed ({err})");
             return false;
         }
     };
 
     if status.exited() {
         if let Some(code) = status.exit_status() {
-            eprintln!("playniceplease: pid={pid}: terminated (exit code {code})");
+            eprintln!("playnicepls: pid={pid}: terminated (exit code {code})");
         } else {
-            eprintln!("playniceplease: pid={pid}: terminated (exit code unavailable)");
+            eprintln!("playnicepls: pid={pid}: terminated (exit code unavailable)");
         }
     } else if status.killed() {
         if let Some(sig) = status.terminating_signal() {
             eprintln!(
-                "playniceplease: pid={pid}: terminated (killed by signal {sig} {})",
+                "playnicepls: pid={pid}: terminated (killed by signal {sig} {})",
                 signal_name(sig)
             );
         } else {
-            eprintln!("playniceplease: pid={pid}: terminated (killed by signal)");
+            eprintln!("playnicepls: pid={pid}: terminated (killed by signal)");
         }
     } else if status.dumped() {
         if let Some(sig) = status.terminating_signal() {
             eprintln!(
-                "playniceplease: pid={pid}: terminated (killed by signal {sig} {}, core dumped)",
+                "playnicepls: pid={pid}: terminated (killed by signal {sig} {}, core dumped)",
                 signal_name(sig)
             );
         } else {
-            eprintln!("playniceplease: pid={pid}: terminated (killed by signal, core dumped)");
+            eprintln!("playnicepls: pid={pid}: terminated (killed by signal, core dumped)");
         }
     } else {
-        eprintln!("playniceplease: pid={pid}: state changed (unrecognized)");
+        eprintln!("playnicepls: pid={pid}: state changed (unrecognized)");
     }
     true
 }

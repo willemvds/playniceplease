@@ -23,5 +23,5 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \
     && cargo --version
 
 FROM base AS builder
-WORKDIR /playniceplease
+WORKDIR /playnice_please
 CMD ["cargo", "build", "--release", "--offline"]

@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="willemvds/playniceplease"
-VERSION="0.1.2"
+REPO="willemvds/playnice_please"
+VERSION="0.1.3"
 ARCH="x86_64"
-ASSET="playniceplease-${ARCH}-linux-static-${VERSION}.zip"
+ASSET="playnice_please-${ARCH}-linux-static-${VERSION}.zip"
 DOWNLOAD_URL="https://github.com/${REPO}/releases/download/v${VERSION}/${ASSET}"
 INSTALL_DIR="/usr/local/bin"
-BINARY_NAME="playniceplease"
+BINARY_NAME="playnicepls"
 
 tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
